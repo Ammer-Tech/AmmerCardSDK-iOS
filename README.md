@@ -1,10 +1,10 @@
-# AmmerCardsSDK
+# AmmerSmartCardsSDK
 
-Ammer Cards SDK.
+Ammer Smart Cards SDK.
 
 ## Install
 ### SPM
 
 ```
-.package(name: "AmmerCardsSDK", url: "https://github.com/Ammer-Tech/AmmerCardsSDK", .branchItem("master")),
+.package(name: "AmmerSmartCardsSDK", url: "https://github.com/Ammer-Tech/AmmerSmartCardsSDK", .branchItem("master")),
 ```

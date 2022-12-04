@@ -4,25 +4,25 @@
 import PackageDescription
 
 let package = Package(
-  name: "AmmerCardsSDK",
+  name: "AmmerSmartCardsSDK",
   platforms: [
     .iOS(.v13)
   ],
   products: [
     .library(
-      name: "AmmerCardsSDK",
-      targets: ["AmmerCardsSDK"]),
+      name: "AmmerSmartCardsSDK",
+      targets: ["AmmerSmartCardsSDK"]),
   ],
   dependencies: [
       
   ],
   targets: [
     .target(
-      name: "AmmerCardsSDK",
+      name: "AmmerSmartCardsSDK",
       dependencies: [],
       path: "Sources"),
     .testTarget(
-      name: "AmmerCardsSDKTests",
-      dependencies: ["AmmerCardsSDK"]),
+      name: "AmmerSmartCardsSDKTests",
+      dependencies: ["AmmerSmartCardsSDK"]),
   ]
 )
