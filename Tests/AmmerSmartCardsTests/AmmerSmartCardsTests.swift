@@ -1,7 +1,7 @@
 import XCTest
-@testable import AmmerSmartCardsSDK
+@testable import AmmerSmartCards
 
-final class AmmerSmartCardsSDKTests: XCTestCase {
+final class AmmerSmartCardsTests: XCTestCase {
   
   override func setUp() {
     super.setUp()

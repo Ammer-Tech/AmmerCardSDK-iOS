@@ -1,12 +1,12 @@
-# AmmerSmartCardsSDK
+# AmmerSmartCards
 
-Ammer Smart Cards SDK. Use it to activate and get public key from phisical card.
+Ammer Smart Cards. Use it to activate and get public key from phisical card.
 
 ## Install
 ### SPM
 
 ```
-.package(name: "AmmerSmartCardsSDK", url: "https://github.com/Ammer-Tech/AmmerSmartCardsSDK", .branchItem("master")),
+.package(name: "AmmerSmartCards", url: "https://github.com/Ammer-Tech/AmmerSmartCards", .branchItem("master")),
 ```
 
 ## General Usage
@@ -40,7 +40,7 @@ States
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -67,7 +67,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -103,7 +103,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -139,7 +139,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -172,7 +172,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -202,7 +202,7 @@ important note: Extraction of the private key is available only once!
 
 Example
 ```swift
-import AmmerSmartCardsSDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
