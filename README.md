@@ -19,6 +19,7 @@ Ammer Smart Cards. Use it to activate and get public key from phisical card.
   <string>706f727465425443</string>
   <string>63989600FF0001</string>
   <string>A0000008820001</string>
+  <string>A000000882ED01</string>
 </array>
 ```
 
