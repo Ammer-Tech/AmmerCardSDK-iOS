@@ -12,7 +12,7 @@ to:
 ### Using SPM package-manager
 
 ```
-.package(name: "TrustodySDK", url: "https://github.com/Ammer-Tech/TrustodySDK", .branchItem("master")),
+.package(name: "AmmerSmartCards", url: "https://github.com/Ammer-Tech/AmmerSmartCards", .branchItem("master")),
 ```
 
 ## General Usage
