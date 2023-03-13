@@ -1,6 +1,6 @@
-# TrustodySDK
+# AmmerCardSDK
 
-The Trustody Card SDK enables your iOS application to use a Trustody smart-card as a cryptographic interface which is used
+The AmmerCardSDK enables your iOS application to use a Ammer smart-card as a cryptographic interface which is used
 to:
 1. Generate a Secp256k1 Keypair
 2. Set/Modify the PIN code used to trigger cryptographic operations (set at key generation time, used to invoke signature function)
@@ -35,7 +35,7 @@ to:
 </string>
 ```
 
-### Trustody Card State Machine
+### AmmerCardSDK Card State Machine
 
 NOT_INITED - card has no public-keu
 
@@ -54,7 +54,7 @@ The state could also be ``UNDEFINED`` under certain unique circumstances. This c
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -81,7 +81,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -117,7 +117,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -153,7 +153,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -186,7 +186,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -217,7 +217,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 
 Example
 ```swift
-import TrustodySDK
+import AmmerSmartCards
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
