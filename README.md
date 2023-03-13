@@ -1,17 +1,23 @@
-# AmmerSmartCards
+# TrustodySDK
 
-Ammer Smart Cards. Use it to activate and get public key from phisical card.
+The Trustody Card SDK enables your iOS application to use a Trustody smart-card as a cryptographic interface which is used
+to:
+1. Generate a Secp256k1 Keypair
+2. Set/Modify the PIN code used to trigger cryptographic operations (set at key generation time, used to invoke signature function)
+3. Extract the public key to generate an address for a blockchain which leverage Secp256k1 keys (e.g. Bitcoin, Ethereum)
+4. Perform a NONE_WITH_ECDSA signature scheme on a 64-byte payload
 
 ## Install
-### SPM
+
+### Using SPM package-manager
 
 ```
-.package(name: "AmmerSmartCards", url: "https://github.com/Ammer-Tech/AmmerSmartCards", .branchItem("master")),
+.package(name: "TrustodySDK", url: "https://github.com/Ammer-Tech/TrustodySDK", .branchItem("master")),
 ```
 
 ## General Usage
 
-### Info.plist.
+### Info.plist definitions
 
 ```
 <key>com.apple.developer.nfc.readersession.iso7816.select-identifiers</key>
@@ -19,7 +25,6 @@ Ammer Smart Cards. Use it to activate and get public key from phisical card.
   <string>706f727465425443</string>
   <string>63989600FF0001</string>
   <string>A0000008820001</string>
-  <string>A000000882ED01</string>
 </array>
 ```
 
@@ -30,18 +35,26 @@ Ammer Smart Cards. Use it to activate and get public key from phisical card.
 </string>
 ```
 
-### Get state card.
+### Trustody Card State Machine
 
-States
-- NOT_INITED - The card was not inited
-- INITED - The card was inited
-- ACTIVATED_LOCKED - The card was inited and now locked for any operations with public/private key
-- ACTIVATED_UNLOCKED - The card was inited and right now unlocked for any operations with public/private key
-- UNDEFINED - Sate no undefined
+NOT_INITED - card has no public-keu
+
+| State       | Description |Eligible next states |
+| ----------- | ----------- |----------- |
+| NOT_INITED      | The card has no keypair and PIN       | INITED       |
+| INITED   | The card has a keypair and PIN set  |ACTIVATED_LOCKED        |
+| ACTIVATED_LOCKED   | The card requires a PIN code to use the sign function  |ACTIVATED_UNLOCKED        |
+
+The state could also be ``UNDEFINED`` under certain unique circumstances. This can be either a hardware malfunction or a problem with the NFC connection to the host device.
+
+
+### Examples
+
+##### Get the card state
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -64,11 +77,11 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 }
 ```
 
-### Init a new card and set PIN for it.
+##### Activate a new card and set PIN code
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -100,11 +113,11 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 }
 ```
 
-### Get public key, guid and issuer card.
+##### Extract public key and metadata
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -136,11 +149,11 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 }
 ```
 
-### Sign data.
+##### Sign a 64-byte string using ECDSA
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -169,11 +182,11 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 }
 ```
 
-### Change card PIN.
+##### Modify card PIN code
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
@@ -198,12 +211,13 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
 }
 ```
 
-### Extract private key.
-important note: Extraction of the private key is available only once!
+##### Extract private key
+
+:warning: You can only extract the private key once for offline backup such as a paper wallet, a USB stick, or optical media which is never read on a device which is or will be connected to the internet :warning:
 
 Example
 ```swift
-import AmmerSmartCards
+import TrustodySDK
 
 class MyClass: UIViewController, CardNFCServiceDelegate {
     
