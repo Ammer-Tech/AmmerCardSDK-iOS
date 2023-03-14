@@ -69,7 +69,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
         print("error: \(error.localizedDescription)")
     }
 
-    public func cardService(_ cardService: CardNFCService, state: MetaState, guid: String, issuer: String) {
+    public func cardService(_ cardService: CardNFCService, state: MetaState, guid: String, issuer: String, aid: AIDVersion)
         print("state: \(state.rawValue)")
     }
 }
@@ -105,7 +105,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
         }
     }
 
-    public func cardService(_ cardService: CardNFCService, pubKey: String, guid: String, issuer: String) {
+    public func cardService(_ cardService: CardNFCService, pubKey: String, guid: String, issuer: String, state: MetaState, aid: AIDVersion) {
         print("pubKey: \(pubKey), guid: \(guid), issuer: \(issuer)")
     }
 }
@@ -132,7 +132,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
         print("error: \(error.localizedDescription)")
     }
 
-    public func cardService(_ cardService: CardNFCService, state: MetaState, guid: String, issuer: String) {
+    public func cardService(_ cardService: CardNFCService, state: MetaState, guid: String, issuer: String, aid: AIDVersion) {
         print("state: \(state.rawValue)")
         let pin = "123456"
         if state == .ACTIVATED_LOCKED {
@@ -141,7 +141,7 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
         }
     }
 
-    public func cardService(_ cardService: CardNFCService, pubKey: String, guid: String, issuer: String) {
+    public func cardService(_ cardService: CardNFCService, pubKey: String, guid: String, issuer: String, state: MetaState, aid: AIDVersion) {
         print("pubKey: \(pubKey), guid: \(guid), issuer: \(issuer)")
     }
 }
