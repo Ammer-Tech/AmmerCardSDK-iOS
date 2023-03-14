@@ -30,9 +30,7 @@ to:
 
 ```
 <key>NFCReaderUsageDescription</key>
-<string>
-  <string>Use NFC to read data</string>
-</string>
+<string>Use NFC to read data</string>
 ```
 
 ### AmmerCardSDK Card State Machine
