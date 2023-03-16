@@ -13,10 +13,15 @@ enum InstructionCode: UInt8 {
     case INS_DISABLE_PRIVATE_KEY_EXPORT = 0x10
     case INS_SIGN_DATA = 0x11
     case INS_SIGN_PROCESSING_DATA = 0x12
+    
     case INS_LOCK = 0x0A
     case INS_UNLOCK = 0x0B
     case INS_CHANGE_PIN = 0x0C
     case INS_GET_PIN_RETRIES = 0x0D
     case INS_GET_PUBLIC_KEY = 0x0E
     case INS_EXPORT_PRIVATE_KEY = 0x0F
+
+    case INS_ED_GET_PUBLIC_KEY = 0x13
+    case INS_ED_SIGN_DATA = 0x14
+    case INS_ED_SIGN_PROCESSING_DATA = 0x15
 }

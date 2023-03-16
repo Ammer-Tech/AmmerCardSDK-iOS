@@ -1,0 +1,87 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 5.7.2 (swiftlang-5.7.2.135.5 clang-1400.0.29.51)
+// swift-module-flags: -target x86_64-apple-ios13.0-simulator -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -O -module-name AmmerSmartCards
+// swift-module-flags-ignorable: -enable-bare-slash-regex
+import CommonCrypto
+import CoreNFC
+import Foundation
+import Swift
+import UIKit
+import _Concurrency
+import _StringProcessing
+@objc public enum AIDVersion : Swift.Int, Swift.RawRepresentable {
+  case v1
+  case v2
+  case v3
+  case v4
+  case terminal
+  case undefined
+  public typealias RawValue = Swift.String
+  public var rawValue: AmmerSmartCards.AIDVersion.RawValue {
+    get
+  }
+  public init?(rawValue: AmmerSmartCards.AIDVersion.RawValue)
+}
+@objc @_inheritsConvenienceInitializers final public class CardNFCService : ObjectiveC.NSObject {
+  @objc override dynamic public init()
+  convenience public init(delegate: AmmerSmartCards.CardNFCServiceDelegate)
+  convenience public init(delegate: AmmerSmartCards.CardNFCServiceDelegate, command: AmmerSmartCards.Command)
+  convenience public init(delegate: AmmerSmartCards.CardNFCServiceDelegate, command: AmmerSmartCards.Command, pincode: Swift.String, newPincode: Swift.String)
+  convenience public init(delegate: AmmerSmartCards.CardNFCServiceDelegate, command: AmmerSmartCards.Command, pincode: Swift.String)
+  convenience public init(delegate: AmmerSmartCards.CardNFCServiceDelegate, command: AmmerSmartCards.Command, pincode: Swift.String, dataForSignArray: [Swift.String])
+  final public func begin(alertMessage: Swift.String = "Please hold your card up against the rear side of your iPhone, next to the camera.")
+  final public func setPin(_ value: Swift.String)
+  final public func sign(_ dataForSignArray: [Swift.String])
+  final public func pay(_ dataForSignArray: [Swift.String])
+  final public func invalidate(_ text: Swift.String)
+  @objc deinit
+}
+extension AmmerSmartCards.CardNFCService : CoreNFC.NFCTagReaderSessionDelegate {
+  final public func tagReaderSessionDidBecomeActive(_ session: CoreNFC.NFCTagReaderSession)
+  final public func tagReaderSession(_ session: CoreNFC.NFCTagReaderSession, didInvalidateWithError error: Swift.Error)
+  final public func tagReaderSession(_ session: CoreNFC.NFCTagReaderSession, didDetect tags: [CoreNFC.NFCTag])
+}
+@objc public protocol CardNFCServiceDelegate {
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, error: Swift.Error)
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, state: AmmerSmartCards.MetaState, guid: Swift.String, issuer: Swift.String, aid: AmmerSmartCards.AIDVersion)
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, signed data: [Swift.String])
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, progress: Swift.Float)
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, privateKey: Swift.String)
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, pubKey: Swift.String, guid: Swift.String, issuer: Swift.String, state: AmmerSmartCards.MetaState, aid: AmmerSmartCards.AIDVersion)
+  @objc optional func cardService(_ cardService: AmmerSmartCards.CardNFCService, amount: Swift.String, address: Swift.String, assetId: Swift.String, transactionId: Swift.String)
+}
+public enum Command : Swift.UInt8 {
+  case setNewPin
+  case sign
+  case getPrivateKey
+  case pay
+  case undefined
+  public init?(rawValue: Swift.UInt8)
+  public typealias RawValue = Swift.UInt8
+  public var rawValue: Swift.UInt8 {
+    get
+  }
+}
+extension Foundation.Data {
+  public func sha256V2() -> Swift.String
+}
+@objc public enum MetaState : Swift.UInt8 {
+  case NOT_INITED = 0x02
+  case INITED = 0x04
+  case ACTIVATED_LOCKED = 0x08
+  case ACTIVATED_UNLOCKED = 0x0F
+  case UNDEFINED = 0x00
+  public init?(rawValue: Swift.UInt8)
+  public typealias RawValue = Swift.UInt8
+  public var rawValue: Swift.UInt8 {
+    get
+  }
+}
+extension AmmerSmartCards.AIDVersion : Swift.Equatable {}
+extension AmmerSmartCards.AIDVersion : Swift.Hashable {}
+extension AmmerSmartCards.Command : Swift.Equatable {}
+extension AmmerSmartCards.Command : Swift.Hashable {}
+extension AmmerSmartCards.Command : Swift.RawRepresentable {}
+extension AmmerSmartCards.MetaState : Swift.Equatable {}
+extension AmmerSmartCards.MetaState : Swift.Hashable {}
+extension AmmerSmartCards.MetaState : Swift.RawRepresentable {}
