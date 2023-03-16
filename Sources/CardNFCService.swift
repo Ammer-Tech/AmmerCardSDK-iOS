@@ -18,6 +18,7 @@ public final class CardNFCService: NSObject {
     private var ed_privateNonce: String = ""
     private var ed_publicNonce: String = ""
     private var ed_payload: String = ""
+    private var ed_payloadForSignature: String = ""
 
     private var privateKey: String = ""
     private var issuer: String = ""
@@ -466,42 +467,45 @@ public final class CardNFCService: NSObject {
         var signedDataArray = [String]()
         for (index, item) in dataForSign.enumerated() {
             
-            guard let hexadecimal = item.1.hexadecimal else {
-                continue
-            }
-
             let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
             let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
             let privateNonceBytes: [UInt8] = [UInt8](self.ed_privateNonce.hexadecimal ?? Data())
             let publicNonceBytes: [UInt8] = [UInt8](self.ed_publicNonce.hexadecimal ?? Data())
+            let payloadForSignatureBytes: [UInt8] = self.ed_payloadForSignature.hexadecimal?.copyBytes() ?? [UInt8]()
             
             var resultBytes = [UInt8]()
             resultBytes.append(contentsOf: self.dataCommandPin(pincode: pincode).copyBytes())
-
+                        
             var instructionCode = InstructionCode.INS_SIGN_DATA.rawValue
             
             switch item.0.uppercased() {
             case "EDDSA":
                 instructionCode = InstructionCode.INS_ED_SIGN_DATA.rawValue
 
-                resultBytes.append(Tag.ED_CARD_PUBLIC_KEY_ENCODED)
-                resultBytes.append(UInt8(publicKeyBytes.count))
-                resultBytes.append(contentsOf: publicKeyBytes)
+                if payloadForSignatureBytes.count > 0 {
+                    resultBytes.append(contentsOf: payloadForSignatureBytes)
+                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
+                } else {
+                    resultBytes.append(Tag.ED_CARD_PUBLIC_KEY_ENCODED)
+                    resultBytes.append(UInt8(publicKeyBytes.count))
+                    resultBytes.append(contentsOf: publicKeyBytes)
 
-                //private nonce
-                resultBytes.append(Tag.ED_PRIVATE_NONCE)
-                resultBytes.append(UInt8(privateNonceBytes.count))
-                resultBytes.append(contentsOf: privateNonceBytes)
+                    //private nonce
+                    resultBytes.append(Tag.ED_PRIVATE_NONCE)
+                    resultBytes.append(UInt8(privateNonceBytes.count))
+                    resultBytes.append(contentsOf: privateNonceBytes)
 
-                //public nonce
-                resultBytes.append(Tag.ED_PUBLIC_NONCE)
-                resultBytes.append(UInt8(publicNonceBytes.count))
-                resultBytes.append(contentsOf: publicNonceBytes)
-                
-                resultBytes.append(Tag.DATA_FOR_SIGN)
-                resultBytes.append(UInt8(payloadBytes.count))
-                resultBytes.append(contentsOf: payloadBytes)
-
+                    //public nonce
+                    resultBytes.append(Tag.ED_PUBLIC_NONCE)
+                    resultBytes.append(UInt8(publicNonceBytes.count))
+                    resultBytes.append(contentsOf: publicNonceBytes)
+                    
+                    resultBytes.append(Tag.DATA_FOR_SIGN)
+                    resultBytes.append(UInt8(payloadBytes.count))
+                    resultBytes.append(contentsOf: payloadBytes)
+                    
+                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
+                }
             default:
                 instructionCode = InstructionCode.INS_SIGN_DATA.rawValue
                 
@@ -695,13 +699,26 @@ public final class CardNFCService: NSObject {
     private func pay(session: NFCTagReaderSession, tag: NFCTag, iso7816Tag: NFCISO7816Tag) {
         
         if let _ = self.dataForSign, let _ = self.pincode {
-            self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
-                self.delegate?.cardService?(self, progress: 1)
-                if !success {
-                    session.invalidate(errorMessage: "Sign command meta data card error")
-                    return
+            switch self.aid {
+            case .v4, .v5:
+                self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
+                    self.delegate?.cardService?(self, progress: 1)
+                    if !success {
+                        session.invalidate(errorMessage: "Sign command meta data card error")
+                        return
+                    }
+                    session.invalidate()
                 }
-                session.invalidate()
+
+            default:
+                self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                    self.delegate?.cardService?(self, progress: 1)
+                    if !success {
+                        session.invalidate(errorMessage: "Sign command meta data card error")
+                        return
+                    }
+                    session.invalidate()
+                }
             }
 
         } else {
@@ -791,7 +808,20 @@ public final class CardNFCService: NSObject {
     
     private func getPublicKeyForPay(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag) {
         
-        self.delegate?.cardService?(self, progress: 0.5)
+        let group = DispatchGroup()
+        
+        group.enter()
+        self.getCardGUIDCommand(session: session, iso7816Tag: iso7816Tag) { success in
+            self.delegate?.cardService?(self, progress: 0.5)
+            if !success {
+                self.delegate?.cardService?(self, progress: 1)
+                session.invalidate(errorMessage: "Get card guid data error")
+                return
+            }
+            group.leave()
+        }
+        
+        group.enter()
         self.getPublicKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
@@ -799,9 +829,18 @@ public final class CardNFCService: NSObject {
                 return
             }
             self.delegate?.cardService?(self, progress: 1)
-            self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
-            self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
+            group.leave()
         }
+
+        group.notify(queue: .global()) {
+            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
+                self.delegate?.cardService?(self, progress: 1)
+                self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
+                self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
+            }
+            //session.invalidate()
+        }
+
     }
     
     private func getDataSlice(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag) {
@@ -968,6 +1007,10 @@ public final class CardNFCService: NSObject {
     
     public func setPin(_ value: String) {
         self.pincode = value
+    }
+    
+    public func setEDPayloadForSignature(_ value: String) {
+        self.ed_payloadForSignature = value
     }
 
     public func setEDPayload(_ value: String) {
