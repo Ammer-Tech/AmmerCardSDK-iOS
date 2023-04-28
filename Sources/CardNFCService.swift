@@ -292,7 +292,7 @@ public final class CardNFCService: NSObject {
         
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
             if let error = error {
-                session.invalidate(errorMessage: "Send command error. Please try again. \(error.localizedDescription)")
+                session.invalidate(errorMessage: "Send command error 5. Please try again. \(error.localizedDescription)")
                 self.delegate?.cardService?(self, error: error)
                 completionHandler(false)
                 return
@@ -361,7 +361,7 @@ public final class CardNFCService: NSObject {
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
             if let error = error {
                 self.delegate?.cardService?(self, error: error)
-                session.invalidate(errorMessage: "Unlock command error. Please try again. \(error.localizedDescription)")
+                session.invalidate(errorMessage: "Unlock command error 4. Please try again. \(error.localizedDescription)")
                 self.delegate?.cardService?(self, error: error)
                 completionHandler(false)
                 return
@@ -386,7 +386,7 @@ public final class CardNFCService: NSObject {
         }
         
         guard let dataForSign = self.dataForSign else {
-            session.invalidate(errorMessage: "Sign command error. Please try again.")
+            session.invalidate(errorMessage: "Sign command error 9. Please try again.")
             completionHandler(false)
             return
         }
@@ -420,7 +420,7 @@ public final class CardNFCService: NSObject {
             group.enter()
             iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
                 if let error = error {
-                    session.invalidate(errorMessage: "Sign command error. Please try again. \(error.localizedDescription)")
+                    session.invalidate(errorMessage: "Sign command error 8. Please try again. \(error.localizedDescription)")
                     self.delegate?.cardService?(self, error: error)
                     completionHandler(false)
                     return
@@ -458,7 +458,7 @@ public final class CardNFCService: NSObject {
         }
         
         guard let dataForSign = self.dataForSign else {
-            session.invalidate(errorMessage: "Sign command error. Please try again.")
+            session.invalidate(errorMessage: "Sign command error 6. Please try again.")
             completionHandler(false)
             return
         }
@@ -508,22 +508,12 @@ public final class CardNFCService: NSObject {
                 }
             default:
                 instructionCode = InstructionCode.INS_SIGN_DATA.rawValue
-                
-                //public key
-                resultBytes.append(Tag.PUBKEY_DATA_SIGNATURE)
-                resultBytes.append(UInt8(publicKeyBytes.count))
-                resultBytes.append(contentsOf: publicKeyBytes)
+            
+                guard let hexadecimal = item.1.hexadecimal else {
+                    continue
+                }
 
-                //private nonce
-                resultBytes.append(Tag.PRIVATE_NONCE_DATA_SIGNATURE)
-                resultBytes.append(UInt8(privateNonceBytes.count))
-                resultBytes.append(contentsOf: privateNonceBytes)
-
-                //public nonce
-                resultBytes.append(Tag.PUBLIC_NONCE_DATA_SIGNATURE)
-                resultBytes.append(UInt8(publicNonceBytes.count))
-                resultBytes.append(contentsOf: publicNonceBytes)
-                
+                let payloadBytes: [UInt8] = [UInt8](hexadecimal)
                 resultBytes.append(Tag.DATA_FOR_SIGN)
                 resultBytes.append(UInt8(payloadBytes.count))
                 resultBytes.append(contentsOf: payloadBytes)
@@ -536,7 +526,7 @@ public final class CardNFCService: NSObject {
             group.enter()
             iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
                 if let error = error {
-                    session.invalidate(errorMessage: "Sign command error. Please try again. \(error.localizedDescription)")
+                    session.invalidate(errorMessage: "Sign command error 11. Please try again. \(error.localizedDescription)")
                     self.delegate?.cardService?(self, error: error)
                     completionHandler(false)
                     return
@@ -652,7 +642,7 @@ public final class CardNFCService: NSObject {
             if let error = error {
                 self.delegate?.cardService?(self, progress: 1)
                 self.delegate?.cardService?(self, error: error)
-                session.invalidate(errorMessage: "Connection error. Please try again. \(error.localizedDescription)")
+                session.invalidate(errorMessage: "Connection error 19. Please try again. \(error.localizedDescription)")
                 self.delegate?.cardService?(self, error: error)
                 return
             }
@@ -661,7 +651,7 @@ public final class CardNFCService: NSObject {
                     self.delegate?.cardService?(self, progress: 0.6)
                     if !success {
                         self.delegate?.cardService?(self, progress: 1)
-                        session.invalidate(errorMessage: "Sign command meta data card error")
+                        session.invalidate(errorMessage: "Sign command meta data card error 20")
                         return
                     }
                     
@@ -670,7 +660,7 @@ public final class CardNFCService: NSObject {
                         self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
                             self.delegate?.cardService?(self, progress: 1)
                             if !success {
-                                session.invalidate(errorMessage: "Sign command meta data card error")
+                                session.invalidate(errorMessage: "Sign command meta data card error 21")
                                 return
                             }
                             session.invalidate()
@@ -679,7 +669,7 @@ public final class CardNFCService: NSObject {
                         self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
                             self.delegate?.cardService?(self, progress: 1)
                             if !success {
-                                session.invalidate(errorMessage: "Sign command meta data card error")
+                                session.invalidate(errorMessage: "Sign command meta data card error 22")
                                 return
                             }
                             session.invalidate()
@@ -688,7 +678,7 @@ public final class CardNFCService: NSObject {
                 }
             } else {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Data for sign error")
+                session.invalidate(errorMessage: "Data for sign error 23")
                 return
                 
             }
@@ -704,7 +694,7 @@ public final class CardNFCService: NSObject {
                 self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
                     self.delegate?.cardService?(self, progress: 1)
                     if !success {
-                        session.invalidate(errorMessage: "Sign command meta data card error")
+                        session.invalidate(errorMessage: "Sign command meta data card error 24")
                         return
                     }
                     session.invalidate()
@@ -714,7 +704,7 @@ public final class CardNFCService: NSObject {
                 self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
                     self.delegate?.cardService?(self, progress: 1)
                     if !success {
-                        session.invalidate(errorMessage: "Sign command meta data card error")
+                        session.invalidate(errorMessage: "Sign command meta data card error 25")
                         return
                     }
                     session.invalidate()
@@ -723,7 +713,7 @@ public final class CardNFCService: NSObject {
 
         } else {
             self.delegate?.cardService?(self, progress: 1)
-            session.invalidate(errorMessage: "Do data for sign error")
+            session.invalidate(errorMessage: "Do data for sign error 26")
             return
         }
 
@@ -735,7 +725,7 @@ public final class CardNFCService: NSObject {
         self.getPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
             self.delegate?.cardService?(self, progress: 1)
             if !success {
-                session.invalidate(errorMessage: "Get private key data error")
+                session.invalidate(errorMessage: "Get private key data error 27")
                 return
             }
             
@@ -756,7 +746,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get card guid data error")
+                session.invalidate(errorMessage: "Get card guid data error 28")
                 return
             }
             group.leave()
@@ -767,7 +757,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get public key data error")
+                session.invalidate(errorMessage: "Get public key data error 29")
                 return
             }
             group.leave()
@@ -779,7 +769,7 @@ public final class CardNFCService: NSObject {
                 self.delegate?.cardService?(self, progress: 0.5)
                 if !success {
                     self.delegate?.cardService?(self, progress: 1)
-                    session.invalidate(errorMessage: "Get ed public key data error")
+                    session.invalidate(errorMessage: "Get ed public key data error 30")
                     return
                 }
                 group.leave()
@@ -791,7 +781,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get issuer data error")
+                session.invalidate(errorMessage: "Get issuer data error 31")
                 return
             }
             group.leave()
@@ -815,7 +805,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get card guid data error")
+                session.invalidate(errorMessage: "Get card guid data error 32")
                 return
             }
             group.leave()
@@ -825,7 +815,7 @@ public final class CardNFCService: NSObject {
         self.getPublicKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get public key data error")
+                session.invalidate(errorMessage: "Get public key data error 33")
                 return
             }
             self.delegate?.cardService?(self, progress: 1)
@@ -852,7 +842,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get card guid data error")
+                session.invalidate(errorMessage: "Get card guid data error 34")
                 return
             }
             group.leave()
@@ -863,7 +853,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 0.5)
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
-                session.invalidate(errorMessage: "Get issuer data error")
+                session.invalidate(errorMessage: "Get issuer data error 35")
                 return
             }
             group.leave()
@@ -906,20 +896,20 @@ public final class CardNFCService: NSObject {
             if let error = error {
                 self.delegate?.cardService?(self, progress: 1)
                 self.delegate?.cardService?(self, error: error)
-                session.invalidate(errorMessage: "Connection error. Please try again. \(error.localizedDescription)")
+                session.invalidate(errorMessage: "Connection error 36. Please try again. \(error.localizedDescription)")
                 print("Connection error. Please try again. \(error.localizedDescription)")
                 return
             }
             self.getStateCommand(session: session, iso7816Tag: iso7816Tag) { success in
                 if !success {
                     self.delegate?.cardService?(self, progress: 1)
-                    session.invalidate(errorMessage: "Fetch get state data card error")
+                    session.invalidate(errorMessage: "Fetch get state data card error 37")
                     return
                 }
                 if self.stateCard == .UNDEFINED {
                     self.delegate?.cardService?(self, progress: 1)
                     self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
-                    session.invalidate(errorMessage: "State card undefined")
+                    session.invalidate(errorMessage: "State card undefined 38")
                     return
                 } else if self.stateCard == .ACTIVATED_LOCKED {
                     if let _ = self.pincode {
