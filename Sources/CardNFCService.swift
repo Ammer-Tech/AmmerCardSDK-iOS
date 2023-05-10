@@ -13,6 +13,7 @@ public final class CardNFCService: NSObject {
     private var command: Command = .undefined
     private var cardGUID: String = ""
     private var publicKey: String = ""
+    private var attempts: Int = 0
 
     private var ed_publicKey: String = ""
     private var ed_privateNonce: String = ""
@@ -176,6 +177,27 @@ public final class CardNFCService: NSObject {
             let result = self.handlerTLVFormat(data: data)
             let pubkey = Data(bytes: result.v, count: result.v.count).hexadecimal()
             self.publicKey = pubkey
+            let code = String(format:"%02X", p1)+String(format:"%02X", p2)
+            completionHandler(code == "9000")
+        }
+    }
+    
+    private func getPINAttemptsCommand(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool) -> Void)) {
+        
+        let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_GET_PIN_RETRIES.rawValue, p1Parameter: 0, p2Parameter: 0, data: Data(), expectedResponseLength: 64)
+        
+        iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
+            if let error = error {
+                session.invalidate(errorMessage: "Some error occurred. Please try again. \(error.localizedDescription)")
+                self.delegate?.cardService?(self, error: error)
+                completionHandler(false)
+                return
+            }
+            
+            let result = self.handlerTLVFormat(data: data)
+            if let first = result.v.first {
+                self.attempts = Int(first)
+            }
             let code = String(format:"%02X", p1)+String(format:"%02X", p2)
             completionHandler(code == "9000")
         }
@@ -647,35 +669,46 @@ public final class CardNFCService: NSObject {
                 return
             }
             if let _ = self.dataForSign, let _ = self.pincode {
-                self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
-                    self.delegate?.cardService?(self, progress: 0.6)
+                
+                self.getPINAttemptsCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                    self.delegate?.cardService?(self, progress: 0.5)
                     if !success {
                         self.delegate?.cardService?(self, progress: 1)
-                        session.invalidate(errorMessage: "Sign command meta data card error 20")
+                        session.invalidate(errorMessage: "Get PIN attemts error 31")
                         return
                     }
                     
-                    switch self.aid {
-                    case .v5, .v4:
-                        self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
+                    self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                        self.delegate?.cardService?(self, progress: 0.6)
+                        if !success {
                             self.delegate?.cardService?(self, progress: 1)
-                            if !success {
-                                session.invalidate(errorMessage: "Sign command meta data card error 21")
-                                return
-                            }
-                            session.invalidate()
+                            session.invalidate(errorMessage: "Sign command meta data card error 20\nRemaining PIN attempts \(self.attempts - 1)/3")
+                            return
                         }
-                    default:
-                        self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
-                            self.delegate?.cardService?(self, progress: 1)
-                            if !success {
-                                session.invalidate(errorMessage: "Sign command meta data card error 22")
-                                return
+                        
+                        switch self.aid {
+                        case .v5, .v4:
+                            self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
+                                self.delegate?.cardService?(self, progress: 1)
+                                if !success {
+                                    session.invalidate(errorMessage: "Sign command meta data card error 21")
+                                    return
+                                }
+                                session.invalidate()
                             }
-                            session.invalidate()
+                        default:
+                            self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                                self.delegate?.cardService?(self, progress: 1)
+                                if !success {
+                                    session.invalidate(errorMessage: "Sign command meta data card error 22")
+                                    return
+                                }
+                                session.invalidate()
+                            }
                         }
                     }
                 }
+            
             } else {
                 self.delegate?.cardService?(self, progress: 1)
                 session.invalidate(errorMessage: "Data for sign error 23")
@@ -758,6 +791,17 @@ public final class CardNFCService: NSObject {
             if !success {
                 self.delegate?.cardService?(self, progress: 1)
                 session.invalidate(errorMessage: "Get public key data error 29")
+                return
+            }
+            group.leave()
+        }
+
+        group.enter()
+        self.getPINAttemptsCommand(session: session, iso7816Tag: iso7816Tag) { success in
+            self.delegate?.cardService?(self, progress: 0.5)
+            if !success {
+                self.delegate?.cardService?(self, progress: 1)
+                session.invalidate(errorMessage: "Get PIN retries error 31")
                 return
             }
             group.leave()
@@ -913,29 +957,39 @@ public final class CardNFCService: NSObject {
                     return
                 } else if self.stateCard == .ACTIVATED_LOCKED {
                     if let _ = self.pincode {
-                        self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                        
+                        self.getPINAttemptsCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                            self.delegate?.cardService?(self, progress: 0.5)
                             if !success {
                                 self.delegate?.cardService?(self, progress: 1)
-                                session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts")
+                                session.invalidate(errorMessage: "Get PIN attemts error 31")
                                 return
                             }
-                            self.delegate?.cardService?(self, progress: 0.3)
-                            if self.command == .setNewPin {
-                                self.setNewPincodeCommand(session: session, iso7816Tag: iso7816Tag) { success in
-                                  self.delegate?.cardService?(self, progress: 1)
-                                  if !success {
-                                        session.invalidate(errorMessage: "Set new PIN error")
-                                        return
-                                    }
-                                    session.alertMessage = "Pin changed successfully"
-                                    session.invalidate()
+                            
+                            self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                                if !success {
+                                    self.delegate?.cardService?(self, progress: 1)
+                                    session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts\nRemaining PIN attempts \(self.attempts - 1)/3")
+                                    return
                                 }
-                            } else if self.command == .getPrivateKey {
-                                self.getPKData(session: session, iso7816Tag: iso7816Tag)
-                            } else if self.command == .pay {
-                                self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
-                            } else {
-                                self.getData(session: session, iso7816Tag: iso7816Tag)
+                                self.delegate?.cardService?(self, progress: 0.3)
+                                if self.command == .setNewPin {
+                                    self.setNewPincodeCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                                      self.delegate?.cardService?(self, progress: 1)
+                                      if !success {
+                                            session.invalidate(errorMessage: "Set new PIN error")
+                                            return
+                                        }
+                                        session.alertMessage = "Pin changed successfully"
+                                        session.invalidate()
+                                    }
+                                } else if self.command == .getPrivateKey {
+                                    self.getPKData(session: session, iso7816Tag: iso7816Tag)
+                                } else if self.command == .pay {
+                                    self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
+                                } else {
+                                    self.getData(session: session, iso7816Tag: iso7816Tag)
+                                }
                             }
                         }
                     } else {
