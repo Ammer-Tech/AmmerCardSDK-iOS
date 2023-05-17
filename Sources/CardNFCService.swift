@@ -30,6 +30,8 @@ public final class CardNFCService: NSObject {
     private var session: NFCTagReaderSession?
     private var iso7816Tag: NFCISO7816Tag?
     private var tag: NFCTag?
+    private var needPIN: Bool = true
+    private var gatewaySignature: String = ""
     
     //MARK: -
     public override init() {
@@ -400,6 +402,84 @@ public final class CardNFCService: NSObject {
         }
     }
     
+    private func signCommandWithoutPin(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool) -> Void)) {
+        
+        guard let dataForSign = self.dataForSign else {
+            session.invalidate(errorMessage: "Sign command error 9. Please try again.")
+            completionHandler(false)
+            return
+        }
+
+        let group = DispatchGroup()
+        var signedDataArray = [String]()
+        for (index, item) in dataForSign.enumerated() {
+            
+            var instructionCode = InstructionCode.INS_SIGN_DATA.rawValue
+            if item.0 == "EDDSA" {
+                instructionCode = InstructionCode.INS_ED_SIGN_DATA.rawValue
+            }
+                        
+            var resultBytes = [UInt8]()
+            //resultBytes.append(contentsOf: self.dataCommandPin(pincode: pincode).copyBytes())
+            
+            instructionCode = InstructionCode.INS_SIGN_PROCESSING_DATA.rawValue
+        
+            guard let hexadecimal = item.1.hexadecimal else {
+                continue
+            }
+
+            guard let gatewaySignatureHexadecimal = self.gatewaySignature.hexadecimal else {
+                continue
+            }
+
+            let payloadBytes: [UInt8] = [UInt8](hexadecimal)
+            let gatewaySignatureBytes: [UInt8] = [UInt8](gatewaySignatureHexadecimal)
+            
+            resultBytes.append(Tag.DATA_FOR_SIGN)
+            resultBytes.append(UInt8(payloadBytes.count))
+            resultBytes.append(contentsOf: payloadBytes)
+
+            resultBytes.append(Tag.DATA_SIGNATURE)
+            resultBytes.append(UInt8(gatewaySignatureBytes.count))
+            resultBytes.append(contentsOf: gatewaySignatureBytes)
+
+            let dataCommand = Data(resultBytes)
+            
+            let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
+            
+            group.enter()
+            iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
+                if let error = error {
+                    session.invalidate(errorMessage: "Sign command error 13. Please try again. \(error.localizedDescription)")
+                    self.delegate?.cardService?(self, error: error)
+                    completionHandler(false)
+                    return
+                }
+                
+                let st1 = String(format:"%02X", p1)
+                let st2 = String(format:"%02X", p2)
+                let code = st1+st2
+                let result = self.handlerTLVFormat(data: data)
+                signedDataArray.append(Data(bytes: result.v, count: result.v.count).hexadecimal())
+                
+                #if Debug
+                print("meta command result: \(code) of \(index+1)/\(dataArray.count)")
+                #endif
+                
+                if code != "9000" {
+                    completionHandler(false)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .global()) {
+            self.delegate?.cardService?(self, signed: signedDataArray)
+            completionHandler(true)
+        }
+        
+    }
+
     private func signCommand(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool) -> Void)) {
         
         guard let pincode = pincode else {
@@ -472,6 +552,119 @@ public final class CardNFCService: NSObject {
         
     }
 
+    private func signV4CommandWithoutPin(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool) -> Void)) {
+        
+        guard let dataForSign = self.dataForSign else {
+            session.invalidate(errorMessage: "Sign command error 6. Please try again.")
+            completionHandler(false)
+            return
+        }
+
+        let group = DispatchGroup()
+        var signedDataArray = [String]()
+        for (index, item) in dataForSign.enumerated() {
+            
+            let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
+            let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
+            let privateNonceBytes: [UInt8] = [UInt8](self.ed_privateNonce.hexadecimal ?? Data())
+            let publicNonceBytes: [UInt8] = [UInt8](self.ed_publicNonce.hexadecimal ?? Data())
+            let payloadForSignatureBytes: [UInt8] = self.ed_payloadForSignature.hexadecimal?.copyBytes() ?? [UInt8]()
+            
+            var resultBytes = [UInt8]()
+            //resultBytes.append(contentsOf: self.dataCommandPin(pincode: pincode).copyBytes())
+                        
+            var instructionCode = InstructionCode.INS_SIGN_PROCESSING_DATA.rawValue
+            
+            switch item.0.uppercased() {
+            case "EDDSA":
+                instructionCode = InstructionCode.INS_ED_SIGN_DATA.rawValue
+
+                if payloadForSignatureBytes.count > 0 {
+                    resultBytes.append(contentsOf: payloadForSignatureBytes)
+                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
+                } else {
+                    resultBytes.append(Tag.ED_CARD_PUBLIC_KEY_ENCODED)
+                    resultBytes.append(UInt8(publicKeyBytes.count))
+                    resultBytes.append(contentsOf: publicKeyBytes)
+
+                    //private nonce
+                    resultBytes.append(Tag.ED_PRIVATE_NONCE)
+                    resultBytes.append(UInt8(privateNonceBytes.count))
+                    resultBytes.append(contentsOf: privateNonceBytes)
+
+                    //public nonce
+                    resultBytes.append(Tag.ED_PUBLIC_NONCE)
+                    resultBytes.append(UInt8(publicNonceBytes.count))
+                    resultBytes.append(contentsOf: publicNonceBytes)
+                    
+                    resultBytes.append(Tag.DATA_FOR_SIGN)
+                    resultBytes.append(UInt8(payloadBytes.count))
+                    resultBytes.append(contentsOf: payloadBytes)
+                    
+                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
+                }
+            default:
+                instructionCode = InstructionCode.INS_SIGN_PROCESSING_DATA.rawValue
+            
+                guard let hexadecimal = item.1.hexadecimal else {
+                    continue
+                }
+
+                guard let gatewaySignatureHexadecimal = self.gatewaySignature.hexadecimal else {
+                    continue
+                }
+
+                let payloadBytes: [UInt8] = [UInt8](hexadecimal)
+                let gatewaySignatureBytes: [UInt8] = [UInt8](gatewaySignatureHexadecimal)
+                
+                resultBytes.append(Tag.DATA_FOR_SIGN)
+                resultBytes.append(UInt8(payloadBytes.count))
+                resultBytes.append(contentsOf: payloadBytes)
+
+                resultBytes.append(Tag.DATA_SIGNATURE)
+                resultBytes.append(UInt8(gatewaySignatureBytes.count))
+                resultBytes.append(contentsOf: gatewaySignatureBytes)
+
+            }
+                        
+            let dataCommand = Data(resultBytes)
+            
+            let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
+            
+            group.enter()
+            iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
+                if let error = error {
+                    session.invalidate(errorMessage: "Sign command error 12. Please try again. \(error.localizedDescription)")
+                    self.delegate?.cardService?(self, error: error)
+                    completionHandler(false)
+                    return
+                }
+                
+                let st1 = String(format:"%02X", p1)
+                let st2 = String(format:"%02X", p2)
+                let code = st1+st2
+                let result = self.handlerTLVFormat(data: data)
+                signedDataArray.append(Data(bytes: result.v, count: result.v.count).hexadecimal())
+                
+                #if Debug
+                print("meta command result: \(code) of \(index+1)/\(dataArray.count)")
+                #endif
+                
+                if code != "9000" {
+                    completionHandler(false)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .global()) {
+            self.delegate?.cardService?(self, signed: signedDataArray)
+            completionHandler(true)
+        }
+        
+    }
+
+    
     private func signV4Command(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool) -> Void)) {
         
         guard let pincode = pincode else {
@@ -721,33 +914,62 @@ public final class CardNFCService: NSObject {
 
     private func pay(session: NFCTagReaderSession, tag: NFCTag, iso7816Tag: NFCISO7816Tag) {
         
-        if let _ = self.dataForSign, let _ = self.pincode {
+        if needPIN {
+            if let _ = self.dataForSign, let _ = self.pincode {
+                switch self.aid {
+                case .v4, .v5:
+                    self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
+                        self.delegate?.cardService?(self, progress: 1)
+                        if !success {
+                            session.invalidate(errorMessage: "Sign command meta data card error 24")
+                            return
+                        }
+                        session.alertMessage = "Transaction signed successfully"
+                        session.invalidate()
+                    }
+
+                default:
+                    self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                        self.delegate?.cardService?(self, progress: 1)
+                        if !success {
+                            session.invalidate(errorMessage: "Sign command meta data card error 25")
+                            return
+                        }
+                        session.alertMessage = "Transaction signed successfully"
+                        session.invalidate()
+                    }
+                }
+
+            } else {
+                self.delegate?.cardService?(self, progress: 1)
+                session.invalidate(errorMessage: "Do data for sign error 26")
+                return
+            }
+        } else {
             switch self.aid {
             case .v4, .v5:
-                self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success in
+                self.signV4CommandWithoutPin(session: session, iso7816Tag: iso7816Tag) { success in
                     self.delegate?.cardService?(self, progress: 1)
                     if !success {
                         session.invalidate(errorMessage: "Sign command meta data card error 24")
                         return
                     }
+                    session.alertMessage = "Transaction signed successfully"
                     session.invalidate()
                 }
 
             default:
-                self.signCommand(session: session, iso7816Tag: iso7816Tag) { success in
+                self.signCommandWithoutPin(session: session, iso7816Tag: iso7816Tag) { success in
                     self.delegate?.cardService?(self, progress: 1)
                     if !success {
                         session.invalidate(errorMessage: "Sign command meta data card error 25")
                         return
                     }
+                    session.alertMessage = "Transaction signed successfully"
                     session.invalidate()
                 }
             }
 
-        } else {
-            self.delegate?.cardService?(self, progress: 1)
-            session.invalidate(errorMessage: "Do data for sign error 26")
-            return
         }
 
     }
@@ -908,7 +1130,7 @@ public final class CardNFCService: NSObject {
                 self.delegate?.cardService?(self, progress: 1)
                 self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
             }
-            session.invalidate()
+            //session.invalidate()
         }
         
     }
@@ -1073,6 +1295,14 @@ public final class CardNFCService: NSObject {
         self.ed_publicKey = value
     }
 
+    public func setNeedPIN(_ value: Bool) {
+        self.needPIN = value
+    }
+
+    public func setGatewaySignature(_ value: String) {
+        self.gatewaySignature = value
+    }
+
     public func sign(_ dataForSign: [(String, String)]) {
         self.dataForSign = dataForSign
         guard let session = session else {return}
@@ -1084,12 +1314,17 @@ public final class CardNFCService: NSObject {
 
     public func pay(_ dataForSign: [(String, String)]) {
         self.dataForSign = dataForSign
-        guard let session = session else {return}
+        guard let session = session else {return}        
         guard let iso7816Tag = iso7816Tag else {return}
         guard let tag = tag else {return}
         self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
     }
 
+    public func setAlertMessage(_ text: String) {
+        guard let session = session else {return}
+        session.alertMessage = text
+    }
+    
     public func invalidate(_ text: String) {
         self.session?.invalidate(errorMessage: text)
     }
