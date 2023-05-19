@@ -14,7 +14,8 @@ public final class CardNFCService: NSObject {
     private var cardGUID: String = ""
     private var publicKey: String = ""
     private var attempts: Int = 0
-
+    private var allAttempts: Int = 0
+    
     private var ed_publicKey: String = ""
     private var ed_privateNonce: String = ""
     private var ed_publicNonce: String = ""
@@ -560,63 +561,48 @@ public final class CardNFCService: NSObject {
             return
         }
 
+        guard let gatewaySignatureHexadecimal = self.gatewaySignature.hexadecimal else {
+            session.invalidate(errorMessage: "Sign command error 7. Please try again.")
+            completionHandler(false)
+            return
+        }
+
+        let gatewaySignatureBytes: [UInt8] = [UInt8](gatewaySignatureHexadecimal)
+
         let group = DispatchGroup()
         var signedDataArray = [String]()
         for (index, item) in dataForSign.enumerated() {
             
-            let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
-            let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
-            let privateNonceBytes: [UInt8] = [UInt8](self.ed_privateNonce.hexadecimal ?? Data())
-            let publicNonceBytes: [UInt8] = [UInt8](self.ed_publicNonce.hexadecimal ?? Data())
-            let payloadForSignatureBytes: [UInt8] = self.ed_payloadForSignature.hexadecimal?.copyBytes() ?? [UInt8]()
+            guard let hexadecimal = item.1.hexadecimal else {
+                continue
+            }
+
+            let payloadBytes: [UInt8] = [UInt8](hexadecimal)
+
+//            let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
+//            let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
+//            let privateNonceBytes: [UInt8] = [UInt8](self.ed_privateNonce.hexadecimal ?? Data())
+//            let publicNonceBytes: [UInt8] = [UInt8](self.ed_publicNonce.hexadecimal ?? Data())
+//            let payloadForSignatureBytes: [UInt8] = self.ed_payloadForSignature.hexadecimal?.copyBytes() ?? [UInt8]()
             
             var resultBytes = [UInt8]()
-            //resultBytes.append(contentsOf: self.dataCommandPin(pincode: pincode).copyBytes())
                         
             var instructionCode = InstructionCode.INS_SIGN_PROCESSING_DATA.rawValue
             
             switch item.0.uppercased() {
             case "EDDSA":
-                instructionCode = InstructionCode.INS_ED_SIGN_DATA.rawValue
+                instructionCode = InstructionCode.INS_ED_SIGN_PROCESSING_DATA.rawValue
 
-                if payloadForSignatureBytes.count > 0 {
-                    resultBytes.append(contentsOf: payloadForSignatureBytes)
-                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
-                } else {
-                    resultBytes.append(Tag.ED_CARD_PUBLIC_KEY_ENCODED)
-                    resultBytes.append(UInt8(publicKeyBytes.count))
-                    resultBytes.append(contentsOf: publicKeyBytes)
+                resultBytes.append(Tag.DATA_FOR_SIGN)
+                resultBytes.append(UInt8(payloadBytes.count))
+                resultBytes.append(contentsOf: payloadBytes)
 
-                    //private nonce
-                    resultBytes.append(Tag.ED_PRIVATE_NONCE)
-                    resultBytes.append(UInt8(privateNonceBytes.count))
-                    resultBytes.append(contentsOf: privateNonceBytes)
-
-                    //public nonce
-                    resultBytes.append(Tag.ED_PUBLIC_NONCE)
-                    resultBytes.append(UInt8(publicNonceBytes.count))
-                    resultBytes.append(contentsOf: publicNonceBytes)
-                    
-                    resultBytes.append(Tag.DATA_FOR_SIGN)
-                    resultBytes.append(UInt8(payloadBytes.count))
-                    resultBytes.append(contentsOf: payloadBytes)
-                    
-                    print("resultBytes: \(Data(resultBytes).hexadecimal())")
-                }
+                resultBytes.append(Tag.DATA_SIGNATURE)
+                resultBytes.append(UInt8(gatewaySignatureBytes.count))
+                resultBytes.append(contentsOf: gatewaySignatureBytes)
             default:
                 instructionCode = InstructionCode.INS_SIGN_PROCESSING_DATA.rawValue
-            
-                guard let hexadecimal = item.1.hexadecimal else {
-                    continue
-                }
-
-                guard let gatewaySignatureHexadecimal = self.gatewaySignature.hexadecimal else {
-                    continue
-                }
-
-                let payloadBytes: [UInt8] = [UInt8](hexadecimal)
-                let gatewaySignatureBytes: [UInt8] = [UInt8](gatewaySignatureHexadecimal)
-                
+                            
                 resultBytes.append(Tag.DATA_FOR_SIGN)
                 resultBytes.append(UInt8(payloadBytes.count))
                 resultBytes.append(contentsOf: payloadBytes)
@@ -875,7 +861,7 @@ public final class CardNFCService: NSObject {
                         self.delegate?.cardService?(self, progress: 0.6)
                         if !success {
                             self.delegate?.cardService?(self, progress: 1)
-                            session.invalidate(errorMessage: "Sign command meta data card error 20\nRemaining PIN attempts \(self.attempts - 1)/3")
+                            session.invalidate(errorMessage: "Sign command meta data card error 20\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
                             return
                         }
                         
@@ -1191,7 +1177,7 @@ public final class CardNFCService: NSObject {
                             self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
                                 if !success {
                                     self.delegate?.cardService?(self, progress: 1)
-                                    session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts\nRemaining PIN attempts \(self.attempts - 1)/3")
+                                    session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
                                     return
                                 }
                                 self.delegate?.cardService?(self, progress: 0.3)
@@ -1208,7 +1194,8 @@ public final class CardNFCService: NSObject {
                                 } else if self.command == .getPrivateKey {
                                     self.getPKData(session: session, iso7816Tag: iso7816Tag)
                                 } else if self.command == .pay {
-                                    self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
+                                    //self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
+                                    self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
                                 } else {
                                     self.getData(session: session, iso7816Tag: iso7816Tag)
                                 }
@@ -1317,7 +1304,11 @@ public final class CardNFCService: NSObject {
         guard let session = session else {return}        
         guard let iso7816Tag = iso7816Tag else {return}
         guard let tag = tag else {return}
-        self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
+        if session.isReady {
+            self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
+        } else {
+            self.begin()
+        }
     }
 
     public func setAlertMessage(_ text: String) {
@@ -1327,6 +1318,10 @@ public final class CardNFCService: NSObject {
     
     public func invalidate(_ text: String) {
         self.session?.invalidate(errorMessage: text)
+    }
+
+    public func invalidate() {
+        self.session?.invalidate()
     }
 
 }
@@ -1357,6 +1352,15 @@ extension CardNFCService: NFCTagReaderSessionDelegate {
                 self.tag = tag
                 
                 self.aid = AIDVersion(rawValue: iso7816Tag.initialSelectedAID) ?? .undefined
+                switch self.aid {
+                case .v5:
+                    self.allAttempts = 10
+                case .v1, .v2, .v3, .v4:
+                    self.allAttempts = 3
+                default:
+                    self.allAttempts = 3
+                }
+                
                 if self.aid == .terminal {
                     self.getInvoiceCommand(session: session, iso7816Tag: iso7816Tag) { success in
                         print("get invoice command: \(success)")
