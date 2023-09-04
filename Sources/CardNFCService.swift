@@ -33,6 +33,7 @@ public final class CardNFCService: NSObject {
     private var tag: NFCTag?
     private var needPIN: Bool = true
     private var gatewaySignature: String = ""
+    private let internalQueue = DispatchQueue(label: "smart.card.cardNFCService")
     
     //MARK: -
     public override init() {
@@ -98,10 +99,7 @@ public final class CardNFCService: NSObject {
                 let assetId = res["assetID"] as? String ?? ""
                 let address = res["address"] as? String ?? ""
                 let transactionId = res["transactionID"] as? String ?? ""
-                
-                DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
-                    self.delegate?.cardService?(self, amount: amount, address: address, assetId: assetId, transactionId: transactionId)
-                }
+                self.delegate?.cardService?(self, amount: amount, address: address, assetId: assetId, transactionId: transactionId)
                 //session.invalidate()
             } else {
                 session.invalidate(errorMessage: "Incorrect format. Please try again.")
@@ -474,7 +472,7 @@ public final class CardNFCService: NSObject {
             }
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: self.internalQueue) {
             self.delegate?.cardService?(self, signed: signedDataArray)
             completionHandler(true)
         }
@@ -546,7 +544,7 @@ public final class CardNFCService: NSObject {
             }
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: internalQueue) {
             self.delegate?.cardService?(self, signed: signedDataArray)
             completionHandler(true)
         }
@@ -578,12 +576,6 @@ public final class CardNFCService: NSObject {
             }
 
             let payloadBytes: [UInt8] = [UInt8](hexadecimal)
-
-//            let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
-//            let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
-//            let privateNonceBytes: [UInt8] = [UInt8](self.ed_privateNonce.hexadecimal ?? Data())
-//            let publicNonceBytes: [UInt8] = [UInt8](self.ed_publicNonce.hexadecimal ?? Data())
-//            let payloadForSignatureBytes: [UInt8] = self.ed_payloadForSignature.hexadecimal?.copyBytes() ?? [UInt8]()
             
             var resultBytes = [UInt8]()
                         
@@ -643,7 +635,7 @@ public final class CardNFCService: NSObject {
             }
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: self.internalQueue) {
             self.delegate?.cardService?(self, signed: signedDataArray)
             completionHandler(true)
         }
@@ -750,7 +742,7 @@ public final class CardNFCService: NSObject {
             }
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: self.internalQueue) {
             self.delegate?.cardService?(self, signed: signedDataArray)
             completionHandler(true)
         }
@@ -1039,7 +1031,7 @@ public final class CardNFCService: NSObject {
             group.leave()
         }
         
-        group.notify(queue: .global()) {
+        group.notify(queue: self.internalQueue) {
             self.delegate?.cardService?(self, progress: 1)
             self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
             self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
@@ -1074,12 +1066,10 @@ public final class CardNFCService: NSObject {
             group.leave()
         }
 
-        group.notify(queue: .global()) {
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
-                self.delegate?.cardService?(self, progress: 1)
-                self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
-                self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
-            }
+        group.notify(queue: self.internalQueue) {
+            self.delegate?.cardService?(self, progress: 1)
+            self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
+            self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
             //session.invalidate()
         }
 
@@ -1111,11 +1101,9 @@ public final class CardNFCService: NSObject {
             group.leave()
         }
         
-        group.notify(queue: .global()) {
-            DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
-                self.delegate?.cardService?(self, progress: 1)
-                self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
-            }
+        group.notify(queue: self.internalQueue) {
+            self.delegate?.cardService?(self, progress: 1)
+            self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
             //session.invalidate()
         }
         
@@ -1173,7 +1161,6 @@ public final class CardNFCService: NSObject {
                                 session.invalidate(errorMessage: "Get PIN attemts error 31")
                                 return
                             }
-                            
                             self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
                                 if !success {
                                     self.delegate?.cardService?(self, progress: 1)
@@ -1225,9 +1212,7 @@ public final class CardNFCService: NSObject {
                         }
                     } else {
                         self.delegate?.cardService?(self, progress: 1)
-                        DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 3) {
-                            self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
-                        }
+                        self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
                         session.invalidate()
                     }
                     
@@ -1256,6 +1241,7 @@ public final class CardNFCService: NSObject {
         let session = NFCTagReaderSession(pollingOption: NFCTagReaderSession.PollingOption.iso14443, delegate: self)
         session?.alertMessage = alertMessage
         session?.begin()
+        
     }
     
     public func setPin(_ value: String) {
