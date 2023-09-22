@@ -155,7 +155,11 @@ public final class CardNFCService: NSObject {
             
             let result = self.handlerTLVFormat(data: data)
             if result.v.count > 1 {
-                self.issuer = String(result.v[1])
+                let data = Data(result.v)
+                let decimalValue = data.reduce(0) { v, byte in
+                    return v << 8 | Int(byte)
+                }
+                self.issuer = String(decimalValue)
             }
             
             let code = String(format:"%02X", p1)+String(format:"%02X", p2)
