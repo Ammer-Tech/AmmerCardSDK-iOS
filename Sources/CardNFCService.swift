@@ -856,6 +856,7 @@ public final class CardNFCService: NSObject {
                     self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
                         self.delegate?.cardService?(self, progress: 0.6)
                         if !success {
+                            self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
                             self.delegate?.cardService?(self, progress: 1)
                             session.invalidate(errorMessage: "Sign command meta data card error 20\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
                             return
@@ -1167,17 +1168,21 @@ public final class CardNFCService: NSObject {
                             }
                             self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
                                 if !success {
+                                    self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
                                     self.delegate?.cardService?(self, progress: 1)
-                                    session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
+                                    session.invalidate(errorMessage: "Invalid PIN. You only have \(self.allAttempts) attempts\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
                                     return
                                 }
                                 self.delegate?.cardService?(self, progress: 0.3)
                                 if self.command == .setNewPin {
                                     self.setNewPincodeCommand(session: session, iso7816Tag: iso7816Tag) { success in
                                       self.delegate?.cardService?(self, progress: 1)
-                                      if !success {
+                                        if !success {
                                             session.invalidate(errorMessage: "Set new PIN error")
                                             return
+                                        }
+                                        if let newPincode = self.newPincode {
+                                            self.delegate?.cardService?(self, changePINSuccess: newPincode)
                                         }
                                         session.alertMessage = "Pin changed successfully"
                                         session.invalidate()
@@ -1206,8 +1211,9 @@ public final class CardNFCService: NSObject {
                             }
                             self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success in
                                 if !success {
+                                    self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
                                     self.delegate?.cardService?(self, progress: 1)
-                                    session.invalidate(errorMessage: "Invalid PIN. You only have 3 attempts")
+                                    session.invalidate(errorMessage: "Invalid PIN. You only have \(self.allAttempts) attempts")
                                     return
                                 }
                                 self.getData(session: session, iso7816Tag: iso7816Tag)
