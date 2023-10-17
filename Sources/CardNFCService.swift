@@ -1040,6 +1040,7 @@ public final class CardNFCService: NSObject {
             self.delegate?.cardService?(self, progress: 1)
             self.delegate?.cardService?(self, pubKey: self.publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
             self.delegate?.cardService?(self, pubKey: self.publicKey, ed_pubKey: self.ed_publicKey, guid: self.cardGUID, issuer: self.issuer, state: self.stateCard, aid: self.aid)
+            completionHandler()
             session.invalidate()
         }
         
