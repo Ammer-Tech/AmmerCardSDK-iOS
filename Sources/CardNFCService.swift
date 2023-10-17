@@ -975,7 +975,7 @@ public final class CardNFCService: NSObject {
         
     }
   
-    private func getData(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag) {
+    private func getData(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping(() -> Void)) {
         
         let group = DispatchGroup()
         
@@ -1193,7 +1193,7 @@ public final class CardNFCService: NSObject {
                                     //self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
                                     self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
                                 } else {
-                                    self.getData(session: session, iso7816Tag: iso7816Tag)
+                                    self.getData(session: session, iso7816Tag: iso7816Tag) {}
                                 }
                             }
                         }
@@ -1201,7 +1201,7 @@ public final class CardNFCService: NSObject {
                         self.getDataSlice(session: session, iso7816Tag: iso7816Tag)
                     }
                 } else if self.stateCard == .INITED {
-                    if let _ = self.pincode {
+                    if let pincode = self.pincode {
                         
                         self.activateCommand(session: session, iso7816Tag: iso7816Tag) { success in
                             if !success {
@@ -1216,9 +1216,11 @@ public final class CardNFCService: NSObject {
                                     session.invalidate(errorMessage: "Invalid PIN. You only have \(self.allAttempts) attempts")
                                     return
                                 }
-                                self.getData(session: session, iso7816Tag: iso7816Tag)
+                                self.getData(session: session, iso7816Tag: iso7816Tag) { [weak self] in
+                                    guard let self = self else {return}
+                                    self.delegate?.cardService?(self, inited: self.publicKey, pin: pincode)
+                                }
                             }
-                            
                         }
                     } else {
                         self.delegate?.cardService?(self, progress: 1)
@@ -1370,5 +1372,4 @@ extension CardNFCService: NFCTagReaderSessionDelegate {
             }
         }
     }
-    
 }
