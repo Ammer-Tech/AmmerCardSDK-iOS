@@ -967,10 +967,11 @@ public final class CardNFCService: NSObject {
                 return
             }
             
-            self.disableGetPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
-                session.invalidate()
-            }
+//            self.disableGetPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
+//                session.invalidate()
+//            }
             self.delegate?.cardService?(self, privateKey: self.privateKey)
+            session.invalidate()
         }
         
     }
