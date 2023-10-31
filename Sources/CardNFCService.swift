@@ -958,19 +958,35 @@ public final class CardNFCService: NSObject {
     }
 
     private func getPKData(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag) {
-        self.delegate?.cardService?(self, progress: 0.5)
+        self.delegate?.cardService?(self, progress: 0.1)
         
-        self.getPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
-            self.delegate?.cardService?(self, progress: 1)
+        let group = DispatchGroup()
+        
+        group.enter()
+        self.getIssuerCommand(session: session, iso7816Tag: iso7816Tag) { success in
+            self.delegate?.cardService?(self, progress: 0.5)
             if !success {
+                self.delegate?.cardService?(self, progress: 1)
+                session.invalidate(errorMessage: "Get issuer data error 32")
+                return
+            }
+            group.leave()
+        }
+
+        group.enter()
+        self.getPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
+            self.delegate?.cardService?(self, progress: 0.5)
+            if !success {
+                self.delegate?.cardService?(self, progress: 1)
                 session.invalidate(errorMessage: "Get private key data error 27")
                 return
             }
-            
-//            self.disableGetPrivateKeyCommand(session: session, iso7816Tag: iso7816Tag) { success in
-//                session.invalidate()
-//            }
-            self.delegate?.cardService?(self, privateKey: self.privateKey)
+            group.leave()
+        }
+
+        group.notify(queue: self.internalQueue) {
+            self.delegate?.cardService?(self, progress: 1)
+            self.delegate?.cardService?(self, privateKey: self.privateKey, issuer: self.issuer)
             session.invalidate()
         }
         

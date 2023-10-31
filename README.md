@@ -232,8 +232,8 @@ class MyClass: UIViewController, CardNFCServiceDelegate {
     }
 
     //MARK: - CardNFCServiceDelegate
-    func cardService(_ cardService: CardNFCService, privateKey: String) {
-        print("privateKy: \(privateKey)")
+    func cardService(_ cardService: CardNFCService, privateKey: String, issuer: String) {
+        print("privateKy: \(privateKey), issuer: \(issuer)")
     }
 }
 ```
