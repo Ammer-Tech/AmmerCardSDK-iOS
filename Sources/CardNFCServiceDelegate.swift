@@ -14,4 +14,5 @@ import CoreNFC
     @objc optional func cardService(_ cardService: CardNFCService, incorrectPIN pubKey: String)
     @objc optional func cardService(_ cardService: CardNFCService, changePINSuccess newPin: String)
     @objc optional func cardService(_ cardService: CardNFCService, inited pubKey: String, pin: String)
+    @objc optional func cardService(_ cardService: CardNFCService, message: String)
 }
