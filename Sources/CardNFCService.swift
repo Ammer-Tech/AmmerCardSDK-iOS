@@ -115,7 +115,7 @@ public final class CardNFCService: NSObject {
             let code = st1+st2
             
             if let error = error {
-                session.invalidate(errorMessage: "Some error occurred. Error \(code). \(error.localizedDescription). Please try again.")
+                session.invalidate(errorMessage: "\(error.localizedDescription). This card isn't a Ammer Wallet or it is blocked.")
                 self.delegate?.cardService?(self, error: error)
                 completionHandler(false, code)
                 return
@@ -822,7 +822,7 @@ public final class CardNFCService: NSObject {
             if let error = error {
                 self.delegate?.cardService?(self, progress: 1)
                 self.delegate?.cardService?(self, error: error)
-                session.invalidate(errorMessage: "Connection tag error. Initial selected AID \(iso7816Tag.initialSelectedAID.isEmpty ? "empty": iso7816Tag.initialSelectedAID). Identifier \(iso7816Tag.identifier.hexEncodedString()). \(error.localizedDescription). Please try again.")
+                session.invalidate(errorMessage: "This card isn't a Ammer Wallet or it is blocked. \(error.localizedDescription).")
                 return
             }
             if let _ = self.dataForSign, let _ = self.pincode {
@@ -1141,15 +1141,15 @@ public final class CardNFCService: NSObject {
             if let error = error {
                 self.delegate?.cardService?(self, progress: 1)
                 self.delegate?.cardService?(self, error: error)
-                session.invalidate(errorMessage: "Connection tag error. Initial selected AID \(iso7816Tag.initialSelectedAID.isEmpty ? "empty": iso7816Tag.initialSelectedAID). Identifier \(iso7816Tag.identifier.hexEncodedString()). \(error.localizedDescription). Please try again.")
+                session.invalidate(errorMessage: "This card isn't a Ammer Wallet or it is blocked. \(error.localizedDescription).")
                 return
             }
 
             self.getStateCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
                 if !success {
                     self.delegate?.cardService?(self, progress: 1)
-                    self.delegate?.cardService?(self, message: "Fetch get state data card error \(code)")
-                    session.invalidate(errorMessage: "Fetch get state data card error \(code)")
+                    self.delegate?.cardService?(self, message: "This card isn't a Ammer Wallet or it is blocked.")
+                    session.invalidate(errorMessage: "This card isn't a Ammer Wallet or it is blocked.")
                     return
                 }
                 switch self.stateCard {
