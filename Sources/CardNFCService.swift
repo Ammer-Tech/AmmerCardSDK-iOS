@@ -25,6 +25,7 @@ public final class CardNFCService: NSObject {
     private var privateKey: String = ""
     private var issuer: String = ""
     private var aid: AIDVersion = .undefined
+    private var finalSecret: Data?
     
     private var delegate: CardNFCServiceDelegate?
     
@@ -157,7 +158,7 @@ public final class CardNFCService: NSObject {
                 }
                 self.issuer = String(decimalValue)
             }
-            
+
             completionHandler(code == "9000", code)
         }
     }
@@ -209,6 +210,61 @@ public final class CardNFCService: NSObject {
         }
     }
     
+    private func handshakeCommand(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool, String) -> Void)) {
+        
+        guard self.aid == .v6 else {
+            completionHandler(true, "9000")
+            return
+        }
+        
+        let keyPair = SecureData.generateSecp256k1KeyPair()
+        guard let keyPair = keyPair else {
+            completionHandler(false, "Failed to generate key pair")
+            return
+        }
+        
+        guard let dataCommand = self.dataCommand(value: keyPair.publicKey) else {
+            completionHandler(false, "Failed to prepare pub key")
+            return
+        }
+
+        guard let privateKeyBytes = keyPair.privateKey.hexadecimal else {
+            completionHandler(false, "Failed to prepare private key")
+            return
+        }
+        
+        let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_ECDH_HANDSHAKE.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
+        
+        iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
+            let st1 = String(format:"%02X", p1)
+            let st2 = String(format:"%02X", p2)
+            let code = st1+st2
+            
+            if let error = error {
+                session.invalidate(errorMessage: "\(error.localizedDescription). Handshake error.")
+                self.delegate?.cardService?(self, error: error)
+                completionHandler(false, code)
+                return
+            }
+            
+            let ecdhCardPublicKeyRange = Int(TLV.OFFSET_VALUE)..<Int((TLV.HEADER_BYTES_COUNT + Lenght.CARD_PUBLIC_KEY_MAX_LENGTH))
+            let ecdhCardPublicKeyBytes = data.subdata(in: ecdhCardPublicKeyRange)
+
+            let ecdhNonceStartIndex = Int(TLV.OFFSET_VALUE + TLV.HEADER_BYTES_COUNT + Lenght.CARD_PUBLIC_KEY_MAX_LENGTH)
+            let ecdhNonceBytes = data.subdata(in: ecdhNonceStartIndex..<data.count)
+            
+            print("ecdhCardPublicKey: \(ecdhCardPublicKeyBytes.hexEncodedString())")
+            print("ecdhNonceBytes: \(ecdhNonceBytes.hexEncodedString())")
+                        
+            if let finalSecret = SecureData.generateECDHSecret(hostPrivateKeyBytes: privateKeyBytes.copyBytes(), ecdhCardPublicKeyBytes: ecdhCardPublicKeyBytes.copyBytes(), ecdhNonceBytes: ecdhNonceBytes.copyBytes()) {
+                self.finalSecret = finalSecret
+            }
+                
+            completionHandler(self.finalSecret != nil, "")
+        }
+        
+    }
+    
     private func getEDPublicKeyCommand(session: NFCTagReaderSession, iso7816Tag: NFCISO7816Tag, _ completionHandler: @escaping((Bool, String) -> Void)) {
         
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_ED_GET_PUBLIC_KEY.rawValue, p1Parameter: 0, p2Parameter: 0, data: Data(), expectedResponseLength: 64)
@@ -239,8 +295,11 @@ public final class CardNFCService: NSObject {
             return
         }
         
-        let dataCommand = self.dataCommandPin(pincode: pincode)
-        
+        var dataCommand = self.dataCommandPin(pincode: pincode)
+        if let finalSecret = self.finalSecret {
+            dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+        }
+
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_EXPORT_PRIVATE_KEY.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: 64)
         
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
@@ -269,7 +328,10 @@ public final class CardNFCService: NSObject {
             return
         }
         
-        let dataCommand = self.dataCommandPin(pincode: pincode)
+        var dataCommand = self.dataCommandPin(pincode: pincode)
+        if let finalSecret = self.finalSecret {
+            dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+        }
         
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_DISABLE_PRIVATE_KEY_EXPORT.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: 64)
         
@@ -319,8 +381,11 @@ public final class CardNFCService: NSObject {
             return
         }
         
-        let dataCommand = self.dataCommandPin(pincode: pincode)
-        
+        var dataCommand = self.dataCommandPin(pincode: pincode)
+        if let finalSecret = self.finalSecret {
+            dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+        }
+
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_ACTIVATE.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
         
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
@@ -354,8 +419,11 @@ public final class CardNFCService: NSObject {
         resultBytes.append(contentsOf: self.dataCommandPin(pincode: pincode).copyBytes())
         resultBytes.append(contentsOf: self.dataCommandPin(pincode: newPincode).copyBytes())
         
-        let dataCommand = Data(resultBytes)
-        
+        var dataCommand = Data(resultBytes)
+        if let finalSecret = self.finalSecret {
+            dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+        }
+
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_CHANGE_PIN.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
             let st1 = String(format:"%02X", p1)
@@ -380,8 +448,11 @@ public final class CardNFCService: NSObject {
             return
         }
         
-        let dataCommand = self.dataCommandPin(pincode: pincode)
-        
+        var dataCommand = self.dataCommandPin(pincode: pincode)
+        if let finalSecret = self.finalSecret {
+            dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+        }
+
         let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: InstructionCode.INS_UNLOCK.rawValue, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
         iso7816Tag.sendCommand(apdu: apdu) { data, p1, p2, error in
             let st1 = String(format:"%02X", p1)
@@ -410,7 +481,7 @@ public final class CardNFCService: NSObject {
         
         let group = DispatchGroup()
         var signedDataArray = [String]()
-        for (index, item) in dataForSign.enumerated() {
+        for (_, item) in dataForSign.enumerated() {
             
             var instructionCode = InstructionCode.INS_SIGN_DATA.rawValue
             if item.0 == "EDDSA" {
@@ -441,7 +512,11 @@ public final class CardNFCService: NSObject {
             resultBytes.append(UInt8(gatewaySignatureBytes.count))
             resultBytes.append(contentsOf: gatewaySignatureBytes)
             
-            let dataCommand = Data(resultBytes)
+            var dataCommand = Data(resultBytes)
+            
+            if let finalSecret = self.finalSecret {
+                dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+            }
             
             let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
             
@@ -490,7 +565,7 @@ public final class CardNFCService: NSObject {
         
         let group = DispatchGroup()
         var signedDataArray = [String]()
-        for (index, item) in dataForSign.enumerated() {
+        for (_, item) in dataForSign.enumerated() {
             
             guard let hexadecimal = item.1.hexadecimal else {
                 continue
@@ -510,8 +585,11 @@ public final class CardNFCService: NSObject {
             resultBytes.append(UInt8(payloadBytes.count))
             resultBytes.append(contentsOf: payloadBytes)
             
-            let dataCommand = Data(resultBytes)
-            
+            var dataCommand = Data(resultBytes)
+            if let finalSecret = self.finalSecret {
+                dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+            }
+
             let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
             
             group.enter()
@@ -562,7 +640,7 @@ public final class CardNFCService: NSObject {
         
         let group = DispatchGroup()
         var signedDataArray = [String]()
-        for (index, item) in dataForSign.enumerated() {
+        for (_, item) in dataForSign.enumerated() {
             
             guard let hexadecimal = item.1.hexadecimal else {
                 continue
@@ -598,8 +676,11 @@ public final class CardNFCService: NSObject {
                 
             }
             
-            let dataCommand = Data(resultBytes)
-            
+            var dataCommand = Data(resultBytes)
+            if let finalSecret = self.finalSecret {
+                dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+            }
+
             let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
             
             group.enter()
@@ -648,7 +729,7 @@ public final class CardNFCService: NSObject {
         
         let group = DispatchGroup()
         var signedDataArray = [String]()
-        for (index, item) in dataForSign.enumerated() {
+        for (_, item) in dataForSign.enumerated() {
             
             let payloadBytes: [UInt8] = [UInt8](self.ed_payload.hexadecimal ?? Data())
             let publicKeyBytes: [UInt8] = [UInt8](self.ed_publicKey.hexadecimal ?? Data())
@@ -702,8 +783,11 @@ public final class CardNFCService: NSObject {
                 resultBytes.append(contentsOf: payloadBytes)
             }
             
-            let dataCommand = Data(resultBytes)
-            
+            var dataCommand = Data(resultBytes)
+            if let finalSecret = self.finalSecret {
+                dataCommand = SecureData.encryptCommandData(cmdData: dataCommand, secretKey: finalSecret) ?? dataCommand
+            }
+
             let apdu = NFCISO7816APDU(instructionClass: 0, instructionCode: instructionCode, p1Parameter: 0, p2Parameter: 0, data: dataCommand, expectedResponseLength: -1)
             
             group.enter()
@@ -718,12 +802,12 @@ public final class CardNFCService: NSObject {
                     completionHandler(false, code)
                     return
                 }
-                
-                let result = self.handlerTLVFormat(data: data)
-                signedDataArray.append(Data(bytes: result.v, count: result.v.count).hexadecimal())
-                
+                                
                 if code != "9000" {
                     completionHandler(false, code)
+                } else {
+                    let result = self.handlerTLVFormat(data: data)
+                    signedDataArray.append(Data(bytes: result.v, count: result.v.count).hexadecimal())
                 }
                 group.leave()
             }
@@ -738,6 +822,11 @@ public final class CardNFCService: NSObject {
     
     //MARK: - Tools Private
     private func handlerTLVFormat(data: Data) -> (t: UInt8, l: UInt8, v: [UInt8]) {
+        var data = data
+        if let finalSecret = self.finalSecret, data.count > 16 {
+            data = SecureData.decryptResponseData(responseData: data, secretKey: finalSecret, sw1: 90, sw2: 00) ?? data
+        }
+
         var result: (t: UInt8, l: UInt8, v: [UInt8]) = (t: 0, l: 0, v: [UInt8]())
         let bytes = data.copyBytes()
         
@@ -754,6 +843,25 @@ public final class CardNFCService: NSObject {
         }
         return result
     }
+
+    private func handlerTLVFormat_deprecated(data: Data) -> (t: UInt8, l: UInt8, v: [UInt8]) {
+        var result: (t: UInt8, l: UInt8, v: [UInt8]) = (t: 0, l: 0, v: [UInt8]())
+        let bytes = data.copyBytes()
+        
+        if bytes.count == 0 {
+            return result
+        }
+        result.t = bytes[0]
+        result.l = bytes[1]
+        for (index, element) in bytes.enumerated() {
+            if index == 0 || index == 1 {
+                continue
+            }
+            result.v.append(element)
+        }
+        return result
+    }
+
     
     private func generateGUID(bytes: [UInt8]) -> String {
         var output = ""
@@ -810,9 +918,22 @@ public final class CardNFCService: NSObject {
         
         resultBytes.append(contentsOf: pinBytes)
         let dataCommand = Data(resultBytes)
+
         return dataCommand
     }
-    
+
+    private func dataCommand(value: String) -> Data? {
+        var resultBytes = [UInt8]()
+        guard let valueBytes: [UInt8] = value.hexadecimal?.copyBytes() else {
+            return nil
+        }
+        resultBytes.append(Tag.CARD_PUBLIC_KEY)
+        resultBytes.append(Lenght.CARD_PUBLIC_KEY_MAX_LENGTH)
+        resultBytes.append(contentsOf: valueBytes)
+        let dataCommand = Data(resultBytes)
+        return dataCommand
+    }
+
     private func sign(session: NFCTagReaderSession, tag: NFCTag, iso7816Tag: NFCISO7816Tag) {
         
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -845,7 +966,7 @@ public final class CardNFCService: NSObject {
                         }
                         
                         switch self.aid {
-                        case .v5, .v4:
+                        case .v4, .v5, .v6:
                             self.signV4Command(session: session, iso7816Tag: iso7816Tag) { success, code in
                                 self.delegate?.cardService?(self, progress: 1)
                                 if !success {
@@ -1131,7 +1252,14 @@ public final class CardNFCService: NSObject {
         self.delegate?.cardService?(self, progress: 0.1)
         
         if self.command == .sign {
-            self.sign(session: session, tag: tag, iso7816Tag: iso7816Tag)
+            self.handshakeCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                if !success {
+                    self.delegate?.cardService?(self, progress: 1)
+                    session.invalidate(errorMessage: "Handshake error \(code)")
+                    return
+                }
+                self.sign(session: session, tag: tag, iso7816Tag: iso7816Tag)
+            }
             return
         }
         
@@ -1144,7 +1272,7 @@ public final class CardNFCService: NSObject {
                 session.invalidate(errorMessage: "This card isn't a Ammer Wallet or it is blocked. \(error.localizedDescription).")
                 return
             }
-
+            
             self.getStateCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
                 if !success {
                     self.delegate?.cardService?(self, progress: 1)
@@ -1152,93 +1280,103 @@ public final class CardNFCService: NSObject {
                     session.invalidate(errorMessage: "This card isn't a Ammer Wallet or it is blocked.")
                     return
                 }
-                switch self.stateCard {
-                case .UNDEFINED:
-                    self.delegate?.cardService?(self, progress: 1)
-                    self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
-                    session.invalidate(errorMessage: "State card undefined error \(code)")
-                    return
-                case .ACTIVATED_LOCKED:
-                    if let _ = self.pincode {
-                        
-                        self.getPINAttemptsCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
-                            self.delegate?.cardService?(self, progress: 0.5)
-                            if !success {
-                                self.delegate?.cardService?(self, progress: 1)
-                                session.invalidate(errorMessage: "Get PIN attemts error \(code)")
-                                return
-                            }
-                            self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
-                                if !success {
-                                    self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
-                                    self.delegate?.cardService?(self, progress: 1)
-                                    session.invalidate(errorMessage: "Invalid PIN. Error \(code). You only have \(self.allAttempts) attempts\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
-                                    return
-                                }
-                                self.delegate?.cardService?(self, progress: 0.3)
-                                if self.command == .setNewPin {
-                                    self.setNewPincodeCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
-                                        self.delegate?.cardService?(self, progress: 1)
-                                        if !success {
-                                            session.invalidate(errorMessage: "Set new PIN error. Error \(code)")
-                                            return
-                                        }
-                                        if let newPincode = self.newPincode {
-                                            self.delegate?.cardService?(self, changePINSuccess: newPincode)
-                                        }
-                                        session.alertMessage = "Pin changed successfully"
-                                        session.invalidate()
-                                    }
-                                } else if self.command == .getPrivateKey {
-                                    self.getPKData(session: session, iso7816Tag: iso7816Tag)
-                                } else if self.command == .pay {
-                                    //self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
-                                    self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
-                                } else {
-                                    self.getData(session: session, iso7816Tag: iso7816Tag) {}
-                                }
-                            }
-                        }
-                    } else {
-                        self.getDataSlice(session: session, iso7816Tag: iso7816Tag)
+                self.handshakeCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                    self.delegate?.cardService?(self, progress: 0.4)
+                    if !success {
+                        self.delegate?.cardService?(self, progress: 1)
+                        session.invalidate(errorMessage: "Handshake error \(code)")
+                        return
                     }
-                case .INITED:
-                    if let pincode = self.pincode {
-                        
-                        self.activateCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
-                            if !success {
-                                self.delegate?.cardService?(self, progress: 1)
-                                session.invalidate(errorMessage: "Activate card error \(code).")
-                                return
-                            }
-                            self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
-                                if !success {
-                                    self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
-                                    self.delegate?.cardService?(self, progress: 1)
-                                    session.invalidate(errorMessage: "Invalid PIN. Error \(code). You only have \(self.allAttempts) attempts")
-                                    return
-                                }
-                                self.getData(session: session, iso7816Tag: iso7816Tag) { [weak self] in
-                                    guard let self = self else {return}
-                                    self.delegate?.cardService?(self, inited: self.publicKey, pin: pincode)
-                                }
-                            }
-                        }
-                    } else {
+                    
+                    switch self.stateCard {
+                    case .UNDEFINED:
                         self.delegate?.cardService?(self, progress: 1)
                         self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
-                        session.invalidate()
+                        session.invalidate(errorMessage: "State card undefined error \(code)")
+                        return
+                    case .ACTIVATED_LOCKED:
+                        if let _ = self.pincode {
+                            self.getPINAttemptsCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                                self.delegate?.cardService?(self, progress: 0.5)
+                                if !success {
+                                    self.delegate?.cardService?(self, progress: 1)
+                                    session.invalidate(errorMessage: "Get PIN attemts error \(code)")
+                                    return
+                                }
+                                self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                                    if !success {
+                                        self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
+                                        self.delegate?.cardService?(self, progress: 1)
+                                        session.invalidate(errorMessage: "Invalid PIN. Error \(code). You only have \(self.allAttempts) attempts\nRemaining PIN attempts \(self.attempts - 1)/\(self.allAttempts)")
+                                        return
+                                    }
+                                    self.delegate?.cardService?(self, progress: 0.3)
+                                    if self.command == .setNewPin {
+                                        self.setNewPincodeCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                                            self.delegate?.cardService?(self, progress: 1)
+                                            if !success {
+                                                session.invalidate(errorMessage: "Set new PIN error. Error \(code)")
+                                                return
+                                            }
+                                            if let newPincode = self.newPincode {
+                                                self.delegate?.cardService?(self, changePINSuccess: newPincode)
+                                            }
+                                            session.alertMessage = "Pin changed successfully"
+                                            session.invalidate()
+                                        }
+                                    } else if self.command == .getPrivateKey {
+                                        self.getPKData(session: session, iso7816Tag: iso7816Tag)
+                                    } else if self.command == .pay {
+                                        //self.getPublicKeyForPay(session: session, iso7816Tag: iso7816Tag)
+                                        self.pay(session: session, tag: tag, iso7816Tag: iso7816Tag)
+                                    } else {
+                                        self.getData(session: session, iso7816Tag: iso7816Tag) {}
+                                    }
+                                }
+                            }
+                            
+                        } else {
+                            self.getDataSlice(session: session, iso7816Tag: iso7816Tag)
+                        }
+                    case .INITED:
+                        if let pincode = self.pincode {
+                            
+                            self.activateCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                                if !success {
+                                    self.delegate?.cardService?(self, progress: 1)
+                                    session.invalidate(errorMessage: "Activate card error \(code).")
+                                    return
+                                }
+                                self.unlockCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
+                                    if !success {
+                                        self.delegate?.cardService?(self, incorrectPIN: self.publicKey)
+                                        self.delegate?.cardService?(self, progress: 1)
+                                        session.invalidate(errorMessage: "Invalid PIN. Error \(code). You only have \(self.allAttempts) attempts")
+                                        return
+                                    }
+                                    self.getData(session: session, iso7816Tag: iso7816Tag) { [weak self] in
+                                        guard let self = self else {return}
+                                        self.delegate?.cardService?(self, inited: self.publicKey, pin: pincode)
+                                    }
+                                }
+                            }
+                        } else {
+                            self.delegate?.cardService?(self, progress: 1)
+                            self.delegate?.cardService?(self, state: self.stateCard, guid: self.cardGUID, issuer: self.issuer, aid: self.aid)
+                            session.invalidate()
+                        }
+                        
+                    case .NOT_INITED:
+                        print("NOT_INITED")
+                        break
+                    case .ACTIVATED_UNLOCKED:
+                        print("ACTIVATED_UNLOCKED")
+                        break
                     }
 
-                case .NOT_INITED:
-                    print("NOT_INITED")
-                    break
-                case .ACTIVATED_UNLOCKED:
-                    print("ACTIVATED_UNLOCKED")
-                    break
                 }
             }
-
+            
         }
     }
     
@@ -1358,7 +1496,7 @@ extension CardNFCService: NFCTagReaderSessionDelegate {
                 
                 self.aid = AIDVersion(rawValue: iso7816Tag.initialSelectedAID) ?? .undefined
                 switch self.aid {
-                case .v5:
+                case .v5, .v6:
                     self.allAttempts = 10
                 case .v1, .v2, .v3, .v4:
                     self.allAttempts = 3

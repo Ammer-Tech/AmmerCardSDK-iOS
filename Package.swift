@@ -14,12 +14,14 @@ let package = Package(
       targets: ["AmmerSmartCards"]),
   ],
   dependencies: [
-      
+      .package(url: "https://github.com/krzyzanowskim/CryptoSwift.git", from: "1.8.3")
   ],
   targets: [
     .target(
       name: "AmmerSmartCards",
-      dependencies: [],
+      dependencies: [
+          .product(name: "CryptoSwift", package: "CryptoSwift")
+      ],
       path: "Sources"),
     .testTarget(
       name: "AmmerSmartCardsTests",

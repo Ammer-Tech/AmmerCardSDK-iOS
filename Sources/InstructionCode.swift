@@ -24,4 +24,5 @@ enum InstructionCode: UInt8 {
     case INS_ED_GET_PUBLIC_KEY = 0x13
     case INS_ED_SIGN_DATA = 0x14
     case INS_ED_SIGN_PROCESSING_DATA = 0x15
+    case INS_ECDH_HANDSHAKE = 0x16
 }

@@ -6,6 +6,7 @@ import Foundation
     case v3
     case v4
     case v5
+    case v6
     case terminal
     case undefined
     public typealias RawValue = String
@@ -22,6 +23,8 @@ import Foundation
             return "A000000882ED01"
         case .v5:
             return "A0000008820002"
+        case .v6:
+            return "A0000008820003"
         case .terminal:
             return "77777777777777"
         case .undefined:
@@ -41,6 +44,8 @@ import Foundation
             self = .v4
         case "A0000008820002":
             self = .v5
+        case "A0000008820003":
+            self = .v6
         case "77777777777777":
             self = .terminal
         case "":
