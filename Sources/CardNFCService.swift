@@ -1132,7 +1132,8 @@ public final class CardNFCService: NSObject {
             group.leave()
         }
         
-        if self.aid == .v5 {
+        switch self.aid {
+        case .v5, .v6:
             group.enter()
             self.getEDPublicKeyCommand(session: session, iso7816Tag: iso7816Tag) { success, code in
                 self.delegate?.cardService?(self, progress: 0.5)
@@ -1143,6 +1144,8 @@ public final class CardNFCService: NSObject {
                 }
                 group.leave()
             }
+        default:
+            break
         }
         
         group.enter()
